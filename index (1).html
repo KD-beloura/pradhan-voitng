@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>पोल: प्रधान कौन जीतेगा?</title>
+<style>
+:root{--bg:#f6f3ea;--card:#fff;--tx:#1d2a1d;--mut:#667;--pri:#2e7d32;--bd:#ddd6c3;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a14;--card:#1f281f;--tx:#eef3ee;--mut:#9aa89a;--pri:#66bb6a;--bd:#33402f}}
+:root[data-theme="dark"]{--bg:#141a14;--card:#1f281f;--tx:#eef3ee;--mut:#9aa89a;--pri:#66bb6a;--bd:#33402f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,"Noto Sans Devanagari",sans-serif}
+main{max-width:480px;margin:0 auto;padding:16px}
+h1{font-size:1.3rem;text-align:center;margin:8px 0 2px}
+.sub{text-align:center;color:var(--mut);font-size:.9rem;margin-bottom:16px}
+.c{background:var(--card);border:2px solid var(--bd);border-radius:14px;padding:12px;margin:10px 0;display:flex;align-items:center;gap:12px;cursor:pointer}
+.c.sel{border-color:var(--pri)}
+.sym{font-size:1.5rem;font-weight:700;width:44px;height:44px;line-height:44px;border-radius:50%;background:var(--bd);text-align:center}
+.nm{font-weight:600}.sm{color:var(--mut);font-size:.85rem}
+.bar{height:8px;background:var(--bd);border-radius:6px;margin-top:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--pri)}
+.info{flex:1}
+button{width:100%;padding:14px;font-size:1rem;border:0;border-radius:12px;background:var(--pri);color:#fff;font-weight:600;margin-top:8px}
+button:disabled{opacity:.5}
+.msg{text-align:center;margin:10px 0;color:var(--mut);font-size:.9rem}
+.tot{text-align:center;font-weight:600;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>🗳️ पोल: प्रधान कौन जीतेगा?</h1>
+<div class="sub">अपनी पसंद का प्रत्याशी चुनें (एक व्यक्ति, एक वोट)<br>यह सिर्फ अनौपचारिक राय-पोल है, असली चुनाव नहीं</div>
+<div id="list"></div>
+<button id="btn" disabled>वोट दें</button>
+<div class="msg" id="msg"></div>
+<div class="tot" id="tot"></div>
+</main>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInAnonymously} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,doc,setDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ====== अपना Firebase config यहाँ रखें ======
+const firebaseConfig = {
+  apiKey: "AIzaSyAfuDxLrSE0PHcRZ-Ky-_F-CcIZ6zMXzQg",
+  authDomain: "pradhan-voting.firebaseapp.com",
+  projectId: "pradhan-voting",
+  storageBucket: "pradhan-voting.firebasestorage.app",
+  messagingSenderId: "252519340274",
+  appId: "1:252519340274:web:a5e68cf0002085d36b986b"
+};
+// =============================================
+
+const C=[
+ {id:"c1",n:"बब्लू वर्मा",s:"1",d:"प्रत्याशी नंबर 1"},
+ {id:"c2",n:"रामराज वर्मा",s:"2",d:"प्रत्याशी नंबर 2"},
+ {id:"c3",n:"शिव दुलारे",s:"3",d:"प्रत्याशी नंबर 3"},
+ {id:"c4",n:"विकास वर्मा",s:"4",d:"प्रत्याशी नंबर 4"}
+];
+let sel=null,counts={},myVote=null,uid=null,db=null;
+const $=i=>document.getElementById(i);
+function render(){
+ const total=Object.values(counts).reduce((a,b)=>a+b,0);
+ $("list").innerHTML=C.map(c=>{
+  const v=counts[c.id]||0,p=total?Math.round(v*100/total):0;
+  return `<div class="c ${sel===c.id||myVote===c.id?'sel':''}" data-id="${c.id}">
+  <div class="sym">${c.s}</div><div class="info"><div class="nm">${c.n}</div>
+  <div class="sm">${c.d}${myVote===c.id?' · ✅ आपका वोट':''}</div>
+  <div class="bar"><i style="width:${p}%"></i></div></div><div class="sm">${v} (${p}%)</div></div>`}).join("");
+ $("tot").textContent="कुल वोट: "+total;
+ $("btn").disabled=!sel||!!myVote||!uid;
+ $("btn").textContent=myVote?"आपने वोट दे दिया है":"वोट दें";
+ document.querySelectorAll(".c").forEach(e=>e.onclick=()=>{if(!myVote){sel=e.dataset.id;render()}});
+}
+$("btn").onclick=async()=>{
+ if(!sel||myVote||!uid)return;
+ if(!confirm("क्या आप पक्का यही वोट देना चाहते हैं?"))return;
+ try{
+  await setDoc(doc(db,"votes",uid),{c:sel});
+  $("msg").textContent="धन्यवाद! आपका वोट दर्ज हो गया।";
+ }catch(e){$("msg").textContent="वोट दर्ज नहीं हो सका: "+(e.code||e.message)}
+};
+render();
+$("msg").textContent="लोड हो रहा है…";
+try{
+ const app=initializeApp(firebaseConfig);
+ db=getFirestore(app);
+ const cred=await signInAnonymously(getAuth(app));
+ uid=cred.user.uid;
+ $("msg").textContent="";
+ onSnapshot(collection(db,"votes"),s=>{
+  counts={};myVote=null;
+  s.forEach(x=>{const c=(x.data()||{}).c;if(c){counts[c]=(counts[c]||0)+1;if(x.id===uid)myVote=c}});
+  render();
+ },e=>{$("msg").textContent="डेटाबेस से जुड़ नहीं सके: "+(e.code||e.message)});
+ render();
+}catch(e){$("msg").textContent="कनेक्शन में दिक्कत: "+(e.code||e.message)}
+</script>
+</body>
+</html>
